@@ -9,6 +9,8 @@ import structlog
 from fastapi import Request, HTTPException, FastAPI, Response
 from datetime import datetime, timezone
 from models import NormalizedEvent, StoredEvent
+import json
+from pathlib import Path
 
 from typing import List
 
@@ -120,6 +122,82 @@ def normalize_stripe_event(event: dict) -> NormalizedEvent | None:
         raw=event,
     )
 
+def map_incident_severity(impact: str) -> str:
+    if impact in ("critical", "major"):
+        return "critical"
+    if impact == "minor":
+        return "warning"
+    return "info"
+
+
+def map_component_severity(status: str) -> str | None:
+    if status == "degraded_performance":
+        return "warning"
+    if status in ("partial_outage", "major_outage"):
+        return "critical"
+    return None  # operational or anything else - ignore
+
+
+def normalize_statuspage_summary(data: dict, source: str) -> list[NormalizedEvent]:
+    events: list[NormalizedEvent] = []
+
+    # Incidents
+    for inc in data.get("incidents", []):
+        severity = map_incident_severity(inc.get("impact", ""))
+        event = NormalizedEvent(
+            event_id=inc["id"],
+            source=source,
+            kind="incident",
+            severity=severity,
+            service=data.get("page", {}).get("name", source),
+            summary=inc.get("name", ""),
+            description=None,
+            started_at=datetime.fromisoformat(inc["created_at"].replace("Z", "+00:00")),
+            resolved_at=(
+                datetime.fromisoformat(inc["resolved_at"].replace("Z", "+00:00"))
+                if inc.get("resolved_at")
+                else None
+            ),
+            raw=inc,
+        )
+        events.append(event)
+
+    # Components
+    for comp in data.get("components", []):
+        severity = map_component_severity(comp.get("status", ""))
+        if not severity:
+            continue
+
+        event = NormalizedEvent(
+            event_id=comp["id"],
+            source=source,
+            kind="status",
+            severity=severity,
+            service=data.get("page", {}).get("name", source),
+            summary=f"{comp.get('name')} is {comp.get('status')}",
+            description=None,
+            started_at=datetime.fromisoformat(comp["updated_at"].replace("Z", "+00:00")),
+            resolved_at=None,
+            raw=comp,
+        )
+        events.append(event)
+
+    return events
+
+ROOT_DIR = Path(__file__).resolve().parent
+
+async def fetch_json(url: str) -> dict:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        return resp.json()
+
+
+def load_fixture(rel_path: str) -> dict:
+    path = ROOT_DIR / rel_path
+    with open(path, "r") as f:
+        return json.load(f)
+
 @app.get("/healthz")
 async def healthz():
     return {"ok": True}
@@ -184,3 +262,43 @@ async def pagerduty_destination(event: StoredEvent):
         PAGERDUTY_STORE.pop()
 
     return {"accepted": True}
+
+@app.post("/ingest/pull-status")
+async def ingest_pull_status():
+    spreedly_url = os.environ.get("SPREEDLY_STATUS_SUMMARY_URL")
+    braze_url = os.environ.get("BRAZE_STATUS_SUMMARY_URL")
+
+    fetched_counts = {"spreedly": 0, "braze": 0}
+    stored_count = 0
+    routed_count = 0
+
+    sources = [
+        ("spreedly_status", "spreedly", spreedly_url, "fixtures/statuspage/spreedly_summary.json"),
+        ("braze_status", "braze", braze_url, "fixtures/statuspage/braze_summary.json"),
+    ]
+
+    for source, key, url, fixture_path in sources:
+        if url:
+            data = await fetch_json(url)
+        else:
+            data = load_fixture(fixture_path)
+
+        normalized_events = normalize_statuspage_summary(data, source)
+        fetched_counts[key] = len(normalized_events)
+
+        for ne in normalized_events:
+            stored_event = StoredEvent(**ne.model_dump(), routed=False, delivered_to=[])
+            _, deduped = store_event(stored_event)
+            if deduped:
+                continue
+
+            stored_count += 1
+
+            if should_route(stored_event.severity):
+                ok = await route_to_pagerduty(stored_event)
+                if ok:
+                    stored_event.routed = True
+                    stored_event.delivered_to.append("pagerduty")
+                    routed_count += 1
+
+    return {"fetched": fetched_counts, "stored": stored_count, "routed": routed_count}
