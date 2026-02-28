@@ -25,3 +25,12 @@ class NormalizedEvent(BaseModel):
 class StoredEvent(NormalizedEvent):
     routed: bool = False
     delivered_to: List[str] = Field(default_factory=list)
+    
+
+class AISummarizeRequest(BaseModel):
+    text: str = Field(min_length=1)
+
+
+class AISummarizeResponse(BaseModel):
+    summary: str
+    suggested_severity: Literal["info", "warning", "critical"]

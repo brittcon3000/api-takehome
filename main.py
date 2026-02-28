@@ -8,7 +8,12 @@ import uuid
 import structlog
 from fastapi import Request, HTTPException, FastAPI, Response
 from datetime import datetime, timezone
-from models import NormalizedEvent, StoredEvent
+from models import (
+    NormalizedEvent,
+    StoredEvent,
+    AISummarizeRequest,
+    AISummarizeResponse,
+)
 import json
 from pathlib import Path
 
@@ -197,6 +202,21 @@ def load_fixture(rel_path: str) -> dict:
     path = ROOT_DIR / rel_path
     with open(path, "r") as f:
         return json.load(f)
+    
+    
+def ai_stub_summarize(text: str) -> tuple[str, str]:
+    lower = text.lower()
+
+    if "payment" in lower and "fail" in lower:
+        return "Payment failure detected", "critical"
+
+    if "outage" in lower or "major" in lower:
+        return "Major service disruption", "critical"
+
+    if "latency" in lower or "degraded" in lower:
+        return "Performance degradation observed", "warning"
+
+    return "General service notification", "info"
 
 @app.get("/healthz")
 async def healthz():
@@ -311,3 +331,8 @@ async def ingest_pull_status():
                     routed_count += 1
 
     return {"fetched": fetched_counts, "stored": stored_count, "routed": routed_count}
+
+@app.post("/ai/summarize", response_model=AISummarizeResponse)
+async def ai_summarize(req: AISummarizeRequest):
+    summary, severity = ai_stub_summarize(req.text)
+    return AISummarizeResponse(summary=summary, suggested_severity=severity)
