@@ -3,22 +3,39 @@ from __future__ import annotations
 import os
 from dotenv import load_dotenv
 import stripe
-from fastapi import Request, HTTPException
+import uuid
+import structlog
+from fastapi import Request, HTTPException, FastAPI, Response
 from datetime import datetime, timezone
-from models import NormalizedEvent
+from models import NormalizedEvent, StoredEvent
 
-from fastapi import FastAPI
 from typing import List
 
-from models import StoredEvent
-
 load_dotenv()
+
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        structlog.processors.add_log_level,
+        structlog.processors.JSONRenderer(),
+    ]
+)
+log = structlog.get_logger()
 
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
 if not STRIPE_WEBHOOK_SECRET:
     raise RuntimeError("Missing required env var: STRIPE_WEBHOOK_SECRET")
 
 app = FastAPI(title="Vendor Signal Normalization & Routing")
+
+#Middleware
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    response: Response = await call_next(request)
+    response.headers["x-request-id"] = request_id
+    log.info("request_complete", request_id=request_id, path=request.url.path, method=request.method, status_code=response.status_code)
+    return response
 
 # In-memory storage (newest first)
 EVENT_STORE: List[StoredEvent] = []
