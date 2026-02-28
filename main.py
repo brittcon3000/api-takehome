@@ -279,7 +279,16 @@ async def ingest_pull_status():
 
     for source, key, url, fixture_path in sources:
         if url:
-            data = await fetch_json(url)
+            try:
+                data = await fetch_json(url)
+            except Exception as e:
+                log.warning(
+                    "statuspage_fetch_failed_falling_back_to_fixture",
+                    vendor=key,
+                    url=url,
+                    error=str(e),
+                )
+                data = load_fixture(fixture_path)
         else:
             data = load_fixture(fixture_path)
 

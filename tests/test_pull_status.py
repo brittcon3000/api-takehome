@@ -13,6 +13,9 @@ def reset_memory():
 def test_pull_status_stores_events(monkeypatch):
     reset_memory()
 
+    monkeypatch.delenv("SPREEDLY_STATUS_SUMMARY_URL", raising=False)
+    monkeypatch.delenv("BRAZE_STATUS_SUMMARY_URL", raising=False)
+
     # Avoid real HTTP routing during test
     async def fake_route(event):
         return True
@@ -32,6 +35,9 @@ def test_pull_status_stores_events(monkeypatch):
 
 def test_pull_status_dedupes_on_second_run(monkeypatch):
     reset_memory()
+    
+    monkeypatch.delenv("SPREEDLY_STATUS_SUMMARY_URL", raising=False)
+    monkeypatch.delenv("BRAZE_STATUS_SUMMARY_URL", raising=False)
 
     async def fake_route(event):
         return True
@@ -47,6 +53,9 @@ def test_pull_status_dedupes_on_second_run(monkeypatch):
 
 def test_pull_status_routes_critical(monkeypatch):
     reset_memory()
+
+    monkeypatch.delenv("SPREEDLY_STATUS_SUMMARY_URL", raising=False)
+    monkeypatch.delenv("BRAZE_STATUS_SUMMARY_URL", raising=False)
 
     # Ensure warnings don't route by default
     monkeypatch.setenv("ROUTE_WARNING", "false")
