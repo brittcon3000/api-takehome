@@ -1,0 +1,25 @@
+{
+  "page": {
+    "id": "spreedly",
+    "name": "Spreedly Status"
+  },
+  "incidents": [
+    {
+      "id": "inc_spreedly_1",
+      "name": "Payment Gateway Latency",
+      "status": "investigating",
+      "impact": "major",
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:30:00Z",
+      "resolved_at": null
+    }
+  ],
+  "components": [
+    {
+      "id": "comp_api",
+      "name": "API",
+      "status": "operational",
+      "updated_at": "2024-01-15T09:00:00Z"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "page": {
+    "id": "braze",
+    "name": "Braze Status"
+  },
+  "incidents": [],
+  "components": [
+    {
+      "id": "comp_dashboard",
+      "name": "Dashboard",
+      "status": "degraded_performance",
+      "updated_at": "2024-01-15T11:00:00Z"
+    }
+  ]
+}

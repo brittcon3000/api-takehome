@@ -1,0 +1,14 @@
+{
+  "id": "evt_1abc",
+  "object": "event",
+  "type": "payout.failed",
+  "created": 1705315200,
+  "data": {
+    "object": {
+      "id": "po_123",
+      "amount": 10000,
+      "currency": "usd",
+      "failure_message": "Insufficient funds"
+    }
+  }
+}

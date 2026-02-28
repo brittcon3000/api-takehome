@@ -1,0 +1,16 @@
+{
+  "id": "evt_2def",
+  "object": "event",
+  "type": "payment_intent.payment_failed",
+  "created": 1705315800,
+  "data": {
+    "object": {
+      "id": "pi_456",
+      "amount": 5000,
+      "currency": "usd",
+      "last_payment_error": {
+        "message": "Card declined"
+      }
+    }
+  }
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import httpx
 from dotenv import load_dotenv
 import stripe
 import uuid
@@ -67,6 +68,26 @@ def store_event(event: StoredEvent) -> tuple[bool, bool]:
         EVENT_STORE.pop()
 
     return True, False
+
+def should_route(severity: str) -> bool:
+    if severity == "critical":
+        return True
+    if severity == "warning":
+        return os.environ.get("ROUTE_WARNING", "false").lower() == "true"
+    return False
+
+async def route_to_pagerduty(event: StoredEvent) -> bool:
+    """
+    Best-effort routing. Returns True if destination accepted the event.
+    """
+    base_url = os.environ.get("SELF_BASE_URL", "http://localhost:3000")
+    try:
+        async with httpx.AsyncClient(base_url=base_url, timeout=5.0) as client:
+            resp = await client.post("/destinations/pagerduty", json=event.model_dump(mode="json"))
+        return resp.status_code == 202
+    except Exception as e:
+        log.warning("pagerduty_route_failed", error=str(e), event_id=event.event_id)
+        return False
 
 def normalize_stripe_event(event: dict) -> NormalizedEvent | None:
     event_type = event.get("type")
@@ -137,6 +158,12 @@ async def ingest_stripe(request: Request):
 
     if deduped:
         return {"received": True, "deduped": True}
+    
+    if should_route(stored_event.severity):
+        ok = await route_to_pagerduty(stored_event)
+        if ok:
+            stored_event.routed = True
+            stored_event.delivered_to.append("pagerduty")
 
     return {"received": True}
 
