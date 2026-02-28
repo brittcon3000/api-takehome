@@ -28,7 +28,7 @@ if not STRIPE_WEBHOOK_SECRET:
 
 app = FastAPI(title="Vendor Signal Normalization & Routing")
 
-#Middleware
+# Middleware
 @app.middleware("http")
 async def correlation_id_middleware(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
@@ -39,6 +39,8 @@ async def correlation_id_middleware(request: Request, call_next):
 
 # In-memory storage (newest first)
 EVENT_STORE: List[StoredEvent] = []
+
+PAGERDUTY_STORE: List[StoredEvent] = []
 
 # Idempotency tracking
 SEEN_EVENT_IDS: set[str] = set()
@@ -137,3 +139,21 @@ async def ingest_stripe(request: Request):
         return {"received": True, "deduped": True}
 
     return {"received": True}
+
+@app.post("/destinations/pagerduty", status_code=202)
+async def pagerduty_destination(event: StoredEvent):
+    # Log receipt (structured)
+    log.info(
+        "pagerduty_received",
+        event_id=event.event_id,
+        source=event.source,
+        severity=event.severity,
+        summary=event.summary,
+    )
+
+    # Store in memory (newest first)
+    PAGERDUTY_STORE.insert(0, event)
+    if len(PAGERDUTY_STORE) > MAX_EVENTS:
+        PAGERDUTY_STORE.pop()
+
+    return {"accepted": True}
