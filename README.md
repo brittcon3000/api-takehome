@@ -164,6 +164,29 @@ Returns `202 Accepted`.
 
 ---
 
+## AI Summarization (Bonus)
+
+A deterministic AI stub endpoint demonstrates how LLM-assisted classification could be integrated without introducing nondeterminism into the critical routing path.
+
+```bash
+curl -X POST http://localhost:3000/ai/summarize \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Multiple payment failures detected across APAC region"}'
+```
+
+Example response:
+
+```json
+{
+  "summary": "Payment failure detected",
+  "suggested_severity": "critical"
+}
+```
+
+This endpoint intentionally uses deterministic keyword logic rather than a real LLM to ensure reproducibility and test stability.
+
+---
+
 # Architecture Overview
 
 ## High-Level Data Flow
@@ -214,6 +237,10 @@ Routing failures:
 - JSON-formatted logs
 - Correlation IDs added via middleware
 - Request-level logging for observability
+
+### AI Isolation
+
+The AI summarization endpoint is intentionally separated from the ingestion and routing pipeline. Routing decisions remain deterministic and rule-based to prevent nondeterministic escalation behavior. AI outputs are advisory and do not directly trigger paging.
 
 ---
 
@@ -292,6 +319,30 @@ Introduce:
 - Rate limiting
 - Replay attack protection
 - Secret rotation via a secure secret manager
+
+## AI Integration Strategy
+
+In this implementation, AI summarization is deterministic and isolated from the routing path.
+
+In production, AI outputs would be integrated as advisory metadata (e.g., `ai_summary`, `ai_suggested_severity`) attached to normalized events at ingestion time.
+
+Routing decisions would remain rule-based and deterministic. AI would assist with:
+
+- Event summarization for human triage
+- Suggested severity classification
+- Incident clustering
+- Runbook recommendations
+
+Additional production considerations would include:
+
+- Structured prompt design with enforced JSON schema
+- PII and secret redaction before model submission
+- Audit logging of model inputs/outputs
+- Latency timeouts and deterministic fallback
+- Cost controls and rate limiting
+- Guardrails to prevent AI-only escalation
+
+This separation ensures operational reliability while still enabling AI-driven enhancements.
 
 ---
 
